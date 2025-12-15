@@ -9,6 +9,7 @@ import {
   getAllBooks,
   getBookById
 } from "../models/bookModel.js";
+import pool from "../config/db.js";
 
 export const getUploadURL = async (req, res) => {
   try {
@@ -74,11 +75,35 @@ export const createBook = async (req, res) => {
 
 export const getBooks = async (req, res) => {
   try {
-    const books = await getAllBooks();
-    res.json({ success: true, books });
+    const result = await pool.query(
+      `SELECT id, file_name, file_url, cover_image_url, content_type, user_id
+       FROM books
+       ORDER BY created_at DESC`
+    );
 
-  } catch (e) {
-    res.status(500).json({ error: "Failed fetching books" });
+    const rows = result.rows;
+
+    const books = await Promise.all(
+      rows.map(async (b) => {
+        const coverReadUrl = b.cover_image_url ? await generateReadURL(b.cover_image_url) : null;
+        const pdfReadUrl = b.file_url ? await generateReadURL(b.file_url) : null;
+        return {
+          id: b.id,
+          fileName: b.file_name,
+          coverImageUrl: b.cover_image_url, // relative path stored in DB
+          fileUrl: b.file_url,
+          contentType: b.content_type,
+          userId: b.user_id,
+          coverReadUrl,
+          pdfReadUrl,
+        };
+      })
+    );
+
+    res.json({ success: true, books });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Failed to fetch books" });
   }
 };
 
